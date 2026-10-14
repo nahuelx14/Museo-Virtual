@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { ARButton, RealityAccelerator } from 'ratk';
+import { hideDetectedSurfaceGeometry } from './hideDetectedSurfaceGeometry.js';
 
 const XR_SESSION_INIT = {
   // RATK 0.3 actualiza detectedPlanes y detectedMeshes en cada frame; deben
@@ -24,6 +25,7 @@ export function createMuseumScene({ mount }) {
     antialias: true,
     powerPreference: 'high-performance',
   });
+  renderer.setClearColor(0x000000, 0);
   renderer.domElement.className = 'xr-canvas';
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(window.innerWidth, window.innerHeight);
@@ -33,6 +35,7 @@ export function createMuseumScene({ mount }) {
   mount.prepend(renderer.domElement);
 
   const realityAccelerator = new RealityAccelerator(renderer.xr);
+  hideDetectedSurfaceGeometry(realityAccelerator);
   scene.add(realityAccelerator.root);
 
   const hemisphereLight = new THREE.HemisphereLight(0xe8fff6, 0x183127, 2.2);
