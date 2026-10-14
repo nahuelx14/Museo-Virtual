@@ -3,6 +3,7 @@ import { ROOM_CALIBRATION_STATES } from '../anchors/createRoomCalibration.js';
 import { createSceneMenu } from './createSceneMenu.js';
 
 const RAY_LENGTH_METERS = 4;
+const SLOT_HOVER_LOAD_DELAY_MS = 300;
 
 export function createControllerInteraction({
   scene,
@@ -46,6 +47,9 @@ export function createControllerInteraction({
   let hitTestPromise = null;
   let leftController = null;
   let rightController = null;
+  let hoveredSlotId = null;
+  let hoverStartedAt = 0;
+  let hoverRequestedSlotId = null;
 
   const controllers = [0, 1].map((index) => {
     const controller = renderer.xr.getController(index);
@@ -139,9 +143,10 @@ export function createControllerInteraction({
         const selectedScene = sceneMenu.getScene(selectedSceneId);
         museumContent.setActiveScene(selectedSceneId);
         sceneMenu.setActiveScene(selectedSceneId);
+        resetSlotHover();
         onSceneChange(selectedSceneId);
         report(
-          `${selectedScene.name} activa. Las 10 mesas conservan exactamente su posición.`,
+          `${selectedScene.name} activa. Apuntá al cartel de una mesa y su STL se cargará automáticamente.`,
         );
         return;
       }
@@ -195,7 +200,7 @@ export function createControllerInteraction({
     const nextSlotId = museumContent.getNextUnplacedSlotId();
 
     if (!nextSlotId) {
-      report('Las 10 mesas ya están colocadas. Apuntá a una base para cargar su obra.');
+      report('Las 10 mesas ya están colocadas. Apuntá a un cartel para cargar su STL.');
       return;
     }
 
@@ -223,7 +228,7 @@ export function createControllerInteraction({
       );
     } else {
       report(
-        `Las 10 mesas quedaron colocadas.${layoutSaved ? '' : ' No se pudo guardar la distribución local.'} Apuntá a una base para cargar su obra.`,
+        `Las 10 mesas quedaron colocadas.${layoutSaved ? '' : ' No se pudo guardar la distribución local.'} Apuntá a un cartel y su STL lo reemplazará.`,
       );
     }
   }
@@ -239,8 +244,48 @@ export function createControllerInteraction({
           : 'Origen listo, pero esta sala todavía no tiene las 10 mesas configuradas en este visor.',
       );
     } else {
-      report('Origen y 10 mesas restaurados. Apuntá a una base para cargar su obra.');
+      report('Origen y 10 mesas restaurados. Apuntá a un cartel y su STL lo reemplazará.');
     }
+  }
+
+  function updateSlotHover(time) {
+    if (!rightController || !roomCalibration.isReady()) {
+      resetSlotHover();
+      return;
+    }
+
+    if (raycastSceneMenu(rightController)) {
+      resetSlotHover();
+      return;
+    }
+
+    const slotId = raycastSlot(rightController);
+
+    if (slotId !== hoveredSlotId) {
+      hoveredSlotId = slotId;
+      hoverStartedAt = time;
+      hoverRequestedSlotId = null;
+      return;
+    }
+
+    if (
+      !slotId ||
+      hoverRequestedSlotId === slotId ||
+      time - hoverStartedAt < SLOT_HOVER_LOAD_DELAY_MS
+    ) {
+      return;
+    }
+
+    hoverRequestedSlotId = slotId;
+    void museumContent.loadSlotArtwork(slotId).catch((error) => {
+      report(`No se pudo cargar la obra: ${error.message ?? error}`);
+    });
+  }
+
+  function resetSlotHover() {
+    hoveredSlotId = null;
+    hoverStartedAt = 0;
+    hoverRequestedSlotId = null;
   }
 
   function raycastSlot(controller) {
@@ -299,8 +344,9 @@ export function createControllerInteraction({
     onStatus(message);
   }
 
-  const removeFrameCallback = addFrameCallback(() => {
+  const removeFrameCallback = addFrameCallback(({ time }) => {
     reticle.visible = Boolean(hitTestTarget?.hitTestResultValid);
+    updateSlotHover(time);
   });
 
   const onSessionStart = () => {
@@ -308,6 +354,7 @@ export function createControllerInteraction({
   };
   const onSessionEnd = () => {
     cleanupHitTestTarget();
+    resetSlotHover();
   };
   renderer.xr.addEventListener('sessionstart', onSessionStart);
   renderer.xr.addEventListener('sessionend', onSessionEnd);
@@ -315,6 +362,7 @@ export function createControllerInteraction({
   return {
     refreshSceneMenu() {
       sceneMenu.setScenes(museumContent.getScenes(), museumContent.getActiveSceneId());
+      resetSlotHover();
     },
     setActiveScene(sceneId) {
       sceneMenu.setActiveScene(sceneId);

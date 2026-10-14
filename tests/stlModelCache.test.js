@@ -43,6 +43,7 @@ test('STLModelCache no vuelve a descargar una URL ya almacenada', async () => {
   assert.equal(requests, 1);
   assert.notEqual(first.mesh.geometry, second.mesh.geometry);
   assert.equal(countGeometryTriangles(first.mesh.geometry), 1);
+  assert.equal(first.mesh.material.side, THREE.DoubleSide);
 
   first.mesh.geometry.dispose();
   first.mesh.material.dispose();

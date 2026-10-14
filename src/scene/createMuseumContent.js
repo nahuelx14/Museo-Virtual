@@ -8,6 +8,8 @@ import { createRoomLayout } from '../anchors/roomPersistence.js';
 
 const BASE_HEIGHT = 0.06;
 const ARTWORK_Y = BASE_HEIGHT + 0.015;
+const MIN_VISIBLE_DIMENSION_METERS = 0.01;
+const MAX_VISIBLE_DIMENSION_METERS = 5;
 
 export function createMuseumContent({
   scene,
@@ -31,6 +33,13 @@ export function createMuseumContent({
     color: 0x72dbb4,
     side: THREE.DoubleSide,
   });
+  const labelHitGeometry = new THREE.SphereGeometry(0.17, 12, 8);
+  const labelHitMaterial = new THREE.MeshBasicMaterial({
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    colorWrite: false,
+  });
   const slots = new Map();
 
   for (const definition of TABLE_SLOTS) {
@@ -53,9 +62,19 @@ export function createMuseumContent({
     root.add(accent);
 
     const label = createLabelSprite(definition.label);
+    label.sprite.name = `${definition.id}-etiqueta`;
     label.sprite.position.set(0, 0.16, 0);
     label.sprite.userData.slotId = definition.id;
     root.add(label.sprite);
+
+    // El texto es un Sprite que siempre mira a la cámara. Usamos un volumen
+    // invisible separado para que el cartel sea fácil de apuntar desde
+    // cualquier ángulo con el controlador.
+    const labelHitArea = new THREE.Mesh(labelHitGeometry, labelHitMaterial);
+    labelHitArea.name = `${definition.id}-selector`;
+    labelHitArea.position.copy(label.sprite.position);
+    labelHitArea.userData.slotId = definition.id;
+    root.add(labelHitArea);
 
     const artworkMount = new THREE.Group();
     artworkMount.name = `${definition.id}-obra`;
@@ -72,7 +91,10 @@ export function createMuseumContent({
       artworkId: null,
       placed: false,
       loadToken: 0,
+      loadingArtworkId: null,
+      loadingPromise: null,
       label,
+      labelHitArea,
     });
   }
 
@@ -156,12 +178,16 @@ export function createMuseumContent({
       return slot.artworkMesh;
     }
 
+    if (slot.loadingArtworkId === artwork.id && slot.loadingPromise) {
+      return slot.loadingPromise;
+    }
+
     const requestToken = ++slot.loadToken;
     const requestedSceneId = activeSceneId;
     clearArtwork(slot);
     onStatus(`Cargando ${artwork.name} bajo demanda…`);
 
-    try {
+    const loadingPromise = (async () => {
       const modelUrl = await resolveModelUrl(artwork);
       const result = await modelCache.createMesh({ ...artwork, modelUrl });
 
@@ -175,23 +201,44 @@ export function createMuseumContent({
       slot.artworkMount.add(result.mesh);
       slot.artworkMesh = result.mesh;
       slot.artworkId = artwork.id;
+      slot.label.sprite.visible = false;
 
       const warning = result.shouldWarn
         ? ` Advertencia: contiene ${result.polygonCount.toLocaleString('es-AR')} polígonos.`
         : '';
-      onStatus(`${artwork.name} cargada en ${slot.definition.label}.${warning}`);
+      const scaleWarning = describeScaleWarning(result.sourceSize, result.mesh.scale);
+      onStatus(
+        `${artwork.name} reemplazó el cartel de ${slot.definition.label}.${warning}${scaleWarning}`,
+      );
 
       return result.mesh;
-    } catch (error) {
+    })().catch((error) => {
       if (requestToken === slot.loadToken) {
+        slot.label.sprite.visible = true;
         onStatus(`No se pudo cargar ${artwork.name}: ${error.message ?? error}`);
       }
 
       return null;
+    });
+
+    slot.loadingArtworkId = artwork.id;
+    slot.loadingPromise = loadingPromise;
+
+    try {
+      return await loadingPromise;
+    } finally {
+      if (slot.loadingPromise === loadingPromise) {
+        slot.loadingArtworkId = null;
+        slot.loadingPromise = null;
+      }
     }
   }
 
   function clearArtwork(slot) {
+    slot.label.sprite.visible = true;
+    slot.loadingArtworkId = null;
+    slot.loadingPromise = null;
+
     if (!slot.artworkMesh) {
       slot.artworkId = null;
       return;
@@ -341,6 +388,8 @@ export function createMuseumContent({
       baseMaterial.dispose();
       accentGeometry.dispose();
       accentMaterial.dispose();
+      labelHitGeometry.dispose();
+      labelHitMaterial.dispose();
       modelCache.dispose();
       roomRoot.removeFromParent();
     },
@@ -373,6 +422,8 @@ function createLabelSprite(text) {
   });
   const sprite = new THREE.Sprite(material);
   sprite.scale.set(0.32, 0.08, 1);
+  // La selección se resuelve con el volumen invisible del slot; evitamos que
+  // Sprite.raycast dependa de una cámara cuando el rayo nace del controlador.
   sprite.raycast = () => {};
 
   return {
@@ -382,6 +433,44 @@ function createLabelSprite(text) {
       material.dispose();
     },
   };
+}
+
+export function describeScaleWarning(sourceSize, appliedScale) {
+  if (!sourceSize || !appliedScale) {
+    return '';
+  }
+
+  const dimensions = ['x', 'y', 'z'].map(
+    (axis) => Number(sourceSize[axis]) * Number(appliedScale[axis]),
+  );
+
+  if (dimensions.some((value) => !Number.isFinite(value) || value < 0)) {
+    return '';
+  }
+
+  const largestDimension = Math.max(...dimensions);
+
+  if (largestDimension > MAX_VISIBLE_DIMENSION_METERS) {
+    return ` Revisá la escala: el modelo mide aproximadamente ${formatMeters(largestDimension)} en su eje mayor.`;
+  }
+
+  if (largestDimension > 0 && largestDimension < MIN_VISIBLE_DIMENSION_METERS) {
+    return ` Revisá la escala: el modelo mide aproximadamente ${formatMeters(largestDimension)} en su eje mayor.`;
+  }
+
+  return '';
+}
+
+function formatMeters(value) {
+  if (value < 0.01) {
+    return `${(value * 1000).toFixed(1)} mm`;
+  }
+
+  if (value < 1) {
+    return `${(value * 100).toFixed(1)} cm`;
+  }
+
+  return `${value.toFixed(2)} m`;
 }
 
 function disposeMesh(mesh) {

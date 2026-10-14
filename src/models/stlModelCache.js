@@ -50,6 +50,9 @@ export class STLModelCache {
       color: artwork.color ?? 0x72dbb4,
       metalness: 0.08,
       roughness: 0.48,
+      // Los STL escolares pueden traer winding o normales inconsistentes.
+      // DoubleSide evita que un modelo válido quede invisible desde afuera.
+      side: THREE.DoubleSide,
     });
     const mesh = new THREE.Mesh(geometry, material);
     const scale = normalizeArtworkScale(artwork.scale);
