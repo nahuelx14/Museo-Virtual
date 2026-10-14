@@ -1,0 +1,30 @@
+solid demo_tetrahedron_meters
+  facet normal 0 -1 0
+    outer loop
+      vertex -0.18 0 -0.12
+      vertex 0.18 0 -0.12
+      vertex 0 0 0.2
+    endloop
+  endfacet
+  facet normal 0 0.8 -0.6
+    outer loop
+      vertex -0.18 0 -0.12
+      vertex 0 0.32 0
+      vertex 0.18 0 -0.12
+    endloop
+  endfacet
+  facet normal 0.85 0.45 0.28
+    outer loop
+      vertex 0.18 0 -0.12
+      vertex 0 0.32 0
+      vertex 0 0 0.2
+    endloop
+  endfacet
+  facet normal -0.85 0.45 0.28
+    outer loop
+      vertex 0 0 0.2
+      vertex 0 0.32 0
+      vertex -0.18 0 -0.12
+    endloop
+  endfacet
+endsolid demo_tetrahedron_meters
