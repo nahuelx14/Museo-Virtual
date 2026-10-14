@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { ROOM_CALIBRATION_STATES } from '../anchors/createRoomCalibration.js';
+import { createSceneMenu } from './createSceneMenu.js';
 
 const RAY_LENGTH_METERS = 4;
 
@@ -10,6 +11,8 @@ export function createControllerInteraction({
   roomCalibration,
   museumContent,
   addFrameCallback,
+  getIsAdmin = () => false,
+  onSceneChange = () => {},
   onStatus = () => {},
 }) {
   const raycaster = new THREE.Raycaster();
@@ -32,11 +35,16 @@ export function createControllerInteraction({
   reticle.visible = false;
 
   const statusPanel = createStatusPanel();
+  const sceneMenu = createSceneMenu({
+    scenes: museumContent.getScenes(),
+    activeSceneId: museumContent.getActiveSceneId(),
+  });
   let currentStatus = 'Ponete de frente al QR y apuntá al centro con el controlador derecho.';
   statusPanel.setText(currentStatus);
 
   let hitTestTarget = null;
   let hitTestPromise = null;
+  let leftController = null;
   let rightController = null;
 
   const controllers = [0, 1].map((index) => {
@@ -50,7 +58,9 @@ export function createControllerInteraction({
       controller.userData.handedness = event.data.handedness;
 
       if (event.data.handedness === 'left') {
+        leftController = controller;
         controller.add(statusPanel.sprite);
+        controller.add(sceneMenu.group);
       }
 
       if (event.data.handedness === 'right') {
@@ -60,6 +70,12 @@ export function createControllerInteraction({
     };
 
     const onDisconnected = () => {
+      if (controller === leftController) {
+        leftController = null;
+        statusPanel.sprite.removeFromParent();
+        sceneMenu.group.removeFromParent();
+      }
+
       if (controller === rightController) {
         rightController = null;
         cleanupHitTestTarget();
@@ -116,6 +132,21 @@ export function createControllerInteraction({
   }
 
   async function handleSelect(controller) {
+    if (controller.userData.handedness === 'right') {
+      const selectedSceneId = raycastSceneMenu(controller);
+
+      if (selectedSceneId) {
+        const selectedScene = sceneMenu.getScene(selectedSceneId);
+        museumContent.setActiveScene(selectedSceneId);
+        sceneMenu.setActiveScene(selectedSceneId);
+        onSceneChange(selectedSceneId);
+        report(
+          `${selectedScene.name} activa. Las 10 mesas conservan exactamente su posición.`,
+        );
+        return;
+      }
+    }
+
     const selectedSlotId = roomCalibration.isReady() ? raycastSlot(controller) : null;
 
     if (selectedSlotId) {
@@ -168,6 +199,13 @@ export function createControllerInteraction({
       return;
     }
 
+    if (!getIsAdmin()) {
+      report(
+        'Las mesas todavía no están configuradas en este visor. Ingresá como admin para colocarlas.',
+      );
+      return;
+    }
+
     const worldPosition = hitTestTarget.getWorldPosition(new THREE.Vector3());
     const worldQuaternion = hitTestTarget.getWorldQuaternion(new THREE.Quaternion());
     const placedSlot = museumContent.placeSlotAtWorldPose(
@@ -195,17 +233,18 @@ export function createControllerInteraction({
 
     if (nextSlotId) {
       const tableNumber = Number(nextSlotId.slice(-2));
-      report(`Origen listo. Apuntá a la Mesa ${tableNumber} y presioná el gatillo derecho.`);
+      report(
+        getIsAdmin()
+          ? `Origen listo. Apuntá a la Mesa ${tableNumber} y presioná el gatillo derecho.`
+          : 'Origen listo, pero esta sala todavía no tiene las 10 mesas configuradas en este visor.',
+      );
     } else {
       report('Origen y 10 mesas restaurados. Apuntá a una base para cargar su obra.');
     }
   }
 
   function raycastSlot(controller) {
-    controller.updateWorldMatrix(true, false);
-    rotationMatrix.identity().extractRotation(controller.matrixWorld);
-    raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
-    raycaster.ray.direction.set(0, 0, -1).applyMatrix4(rotationMatrix).normalize();
+    configureRaycaster(controller);
 
     const intersections = raycaster.intersectObject(museumContent.roomRoot, true);
 
@@ -218,6 +257,22 @@ export function createControllerInteraction({
     }
 
     return null;
+  }
+
+  function raycastSceneMenu(controller) {
+    if (!leftController || !sceneMenu.group.parent) {
+      return null;
+    }
+
+    configureRaycaster(controller);
+    return sceneMenu.raycast(raycaster);
+  }
+
+  function configureRaycaster(controller) {
+    controller.updateWorldMatrix(true, false);
+    rotationMatrix.identity().extractRotation(controller.matrixWorld);
+    raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
+    raycaster.ray.direction.set(0, 0, -1).applyMatrix4(rotationMatrix).normalize();
   }
 
   function cleanupHitTestTarget() {
@@ -258,6 +313,12 @@ export function createControllerInteraction({
   renderer.xr.addEventListener('sessionend', onSessionEnd);
 
   return {
+    refreshSceneMenu() {
+      sceneMenu.setScenes(museumContent.getScenes(), museumContent.getActiveSceneId());
+    },
+    setActiveScene(sceneId) {
+      sceneMenu.setActiveScene(sceneId);
+    },
     setStatus(message) {
       currentStatus = message;
       statusPanel.setText(message);
@@ -276,6 +337,7 @@ export function createControllerInteraction({
       }
 
       statusPanel.dispose();
+      sceneMenu.dispose();
       rayGeometry.dispose();
       rayMaterial.dispose();
       reticleGeometry.dispose();

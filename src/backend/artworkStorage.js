@@ -52,6 +52,44 @@ export function shouldWarnPolygonCount(polygonCount) {
   return Number.isFinite(polygonCount) && polygonCount > POLYGON_WARNING_THRESHOLD;
 }
 
+export async function inspectSTLFile(file) {
+  const metadata = validateSTLFile(file);
+
+  if (typeof file.arrayBuffer !== 'function') {
+    throw new Error('El navegador no pudo leer el contenido del STL.');
+  }
+
+  const buffer = await file.arrayBuffer();
+  const polygonCount = countSTLTriangles(buffer);
+
+  if (polygonCount < 1) {
+    throw new Error('El STL no contiene triángulos reconocibles.');
+  }
+
+  return {
+    ...metadata,
+    polygonCount,
+    shouldWarn: shouldWarnPolygonCount(polygonCount),
+  };
+}
+
+export function countSTLTriangles(value) {
+  const buffer = toArrayBuffer(value);
+
+  if (buffer.byteLength >= 84) {
+    const view = new DataView(buffer);
+    const triangleCount = view.getUint32(80, true);
+    const expectedByteLength = 84 + triangleCount * 50;
+
+    if (triangleCount > 0 && expectedByteLength === buffer.byteLength) {
+      return triangleCount;
+    }
+  }
+
+  const source = new TextDecoder('utf-8', { fatal: false }).decode(buffer);
+  return source.match(/\bfacet\s+normal\b/gi)?.length ?? 0;
+}
+
 export function createArtworkStorage({ client }) {
   if (!client?.storage?.from) {
     throw new TypeError('Se requiere un cliente Supabase Storage válido.');
@@ -85,5 +123,26 @@ export function createArtworkStorage({ client }) {
 
       return data.signedUrl;
     },
+
+    async remove(paths) {
+      const normalizedPaths = Array.isArray(paths) ? paths : [paths];
+      const { error } = await bucket.remove(normalizedPaths.filter(Boolean));
+
+      if (error) {
+        throw new Error(`No se pudo eliminar el STL de Storage: ${error.message}`);
+      }
+    },
   };
+}
+
+function toArrayBuffer(value) {
+  if (value instanceof ArrayBuffer) {
+    return value;
+  }
+
+  if (ArrayBuffer.isView(value)) {
+    return value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength);
+  }
+
+  throw new TypeError('Se esperaba el contenido binario de un STL.');
 }

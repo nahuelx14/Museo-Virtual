@@ -1,5 +1,6 @@
 const TABLE_COUNT = 10;
 const SCENE_COUNT = 3;
+const PUBLIC_BASE_URL = import.meta.env?.BASE_URL ?? '/';
 
 export const TABLE_SLOTS = Object.freeze(
   Array.from({ length: TABLE_COUNT }, (_, index) =>
@@ -16,7 +17,7 @@ export const ARTWORKS = Object.freeze({
     name: 'Prototipo de la escena 1',
     author: 'Contenido técnico de prueba',
     description: 'STL de demostración. Se reemplazará por una obra estudiantil.',
-    modelUrl: '/assets/demo-tetrahedron.stl',
+    modelUrl: `${PUBLIC_BASE_URL}assets/demo-tetrahedron.stl`,
     scale: 1,
     color: 0x72dbb4,
   }),
@@ -25,7 +26,7 @@ export const ARTWORKS = Object.freeze({
     name: 'Prototipo de la escena 2',
     author: 'Contenido técnico de prueba',
     description: 'STL de demostración. Se reemplazará por una obra estudiantil.',
-    modelUrl: '/assets/demo-tetrahedron.stl',
+    modelUrl: `${PUBLIC_BASE_URL}assets/demo-tetrahedron.stl`,
     scale: 1,
     color: 0xf2b84b,
   }),
@@ -34,7 +35,7 @@ export const ARTWORKS = Object.freeze({
     name: 'Prototipo de la escena 3',
     author: 'Contenido técnico de prueba',
     description: 'STL de demostración. Se reemplazará por una obra estudiantil.',
-    modelUrl: '/assets/demo-tetrahedron.stl',
+    modelUrl: `${PUBLIC_BASE_URL}assets/demo-tetrahedron.stl`,
     scale: 1,
     color: 0xa997ff,
   }),
@@ -48,6 +49,7 @@ export const MUSEUM_SCENES = Object.freeze(
     return Object.freeze({
       id,
       name: `Escena ${sceneIndex + 1}`,
+      order: sceneIndex + 1,
       assignments: Object.freeze(
         Object.fromEntries(
           TABLE_SLOTS.map((slot, slotIndex) => [

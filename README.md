@@ -16,31 +16,55 @@ y almacenamiento.
   local de las 10 transformaciones relativas.
 - Paso 6: cliente Supabase, sesión anónima para invitados, acceso admin por
   correo/contraseña y roles protegidos por RLS.
+- Primera versión del panel admin en la landing: creación explícita de salas,
+  carga de STL, conteo de polígonos, escala inicial y asignación de una obra por
+  mesa para cada escena.
 - Entrada de sala por `?room=ID` o formulario manual.
 - Vista previa 3D en escritorio y botón `immersive-ar` gestionado por RATK.
 - Modelo confirmado: 10 mesas físicas fijas y 3 escenas que rotan las obras.
-- El esquema Supabase ya está versionado, pero requiere crear y configurar el
-  proyecto real. Todavía faltan el panel admin completo, la sincronización de
-  offsets entre visores y el modo Examinar.
+- El esquema Supabase ya está versionado. Todavía faltan el ajuste fino espacial
+  desde el casco, la sincronización de offsets entre visores y el modo Examinar.
 
 ## Prototipo espacial actual
 
-1. Elegir una de las tres escenas antes de entrar.
-2. Si el visor ya conoce la sala, se intenta restaurar su anchor persistente.
-3. Si no existe o se marcó `Recalibrar origen al entrar`, ponerse de frente al
+1. Si el visor ya conoce la sala, se intenta restaurar su anchor persistente.
+2. Si no existe o se marcó `Recalibrar origen al entrar`, ponerse de frente al
    QR, apuntar al centro y presionar el gatillo derecho.
-4. Apuntar con el controlador derecho a cada mesa y presionar el gatillo para
+3. Como admin, apuntar con el controlador derecho a cada mesa y presionar el gatillo para
    colocar `Mesa 1` a `Mesa 10`.
-5. Apuntar a una base ya colocada y presionar el gatillo para cargar su STL.
+4. Desde la landing, elegir la escena que se quiere editar y asignar una obra previamente cargada a
+   cada mesa.
+5. Dentro del casco, usar el panel del controlador izquierdo y el rayo del
+   controlador derecho para elegir la escena visible.
+6. Apuntar a una base ya colocada y presionar el gatillo para cargar
+   su STL bajo demanda.
 
 El handle del anchor y la distribución se guardan en el almacenamiento local del
-navegador del visor. Cada escena tiene un STL técnico asignado a `Mesa 1`; las
-demás asignaciones quedan vacías hasta recibir las obras reales. Cambiar de
-escena conserva las 10 posiciones y rota únicamente las asignaciones.
+navegador del visor. Cuando Supabase está configurado, las obras y asignaciones
+se leen del catálogo remoto. Cambiar de escena conserva las 10 posiciones y rota
+únicamente las asignaciones.
 
 Esta persistencia local no sincroniza dispositivos. Supabase incorporará los
 offsets compartidos en la siguiente integración; cada visor nuevo deberá calibrar el mismo QR
 antes de reconstruirlos.
+
+## Flujo del administrador
+
+1. Abrir la URL con `?room=ID` e ingresar con la cuenta admin.
+2. Si el ID aún no existe, crear la sala. La aplicación registra 10 mesas y tres
+   escenas sin colocar físicamente ninguna mesa.
+3. Cargar cada STL junto con nombre, autor, descripción y una escala explícita.
+   La landing analiza el archivo antes de subirlo y muestra una advertencia si
+   supera 100.000 polígonos; el original no se modifica.
+   Título, autor, descripción y escala se pueden corregir después desde la
+   biblioteca, sin reemplazar el archivo original.
+4. Elegir en la landing la escena que se está editando y guardar una obra como
+   máximo para cada mesa. Esta selección no cambia la escena del visitante.
+5. Entrar a WebXR como admin para calibrar el QR y colocar las mesas en orden.
+6. En WebXR, elegir la escena visible desde el menú unido al controlador izquierdo.
+
+La escala puede corregirse desde la biblioteca de la landing. El ajuste fino con
+controladores dentro del casco todavía no forma parte de esta iteración.
 
 ## Requisitos locales
 

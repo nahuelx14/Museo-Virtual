@@ -92,6 +92,17 @@ export function writeRoomLayout(roomId, layout, { storage = window.localStorage 
   }
 }
 
+export function removeRoomLayout(roomId, { storage = window.localStorage } = {}) {
+  const key = createStorageKey(LAYOUT_KEY_PREFIX, roomId);
+
+  try {
+    storage.removeItem(key);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function normalizeRoomLayout(value) {
   if (!value || value.version !== RECORD_VERSION || !isPlainObject(value.tables)) {
     return null;

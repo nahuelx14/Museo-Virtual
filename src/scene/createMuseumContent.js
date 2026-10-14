@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import {
-  getArtworkForSlot,
-  getMuseumScene,
+  ARTWORKS,
   MUSEUM_SCENES,
   TABLE_SLOTS,
 } from '../data/museumCatalog.js';
@@ -10,7 +9,12 @@ import { createRoomLayout } from '../anchors/roomPersistence.js';
 const BASE_HEIGHT = 0.06;
 const ARTWORK_Y = BASE_HEIGHT + 0.015;
 
-export function createMuseumContent({ scene, modelCache, onStatus = () => {} }) {
+export function createMuseumContent({
+  scene,
+  modelCache,
+  resolveModelUrl = async (artwork) => artwork.modelUrl,
+  onStatus = () => {},
+}) {
   const roomRoot = new THREE.Group();
   roomRoot.name = 'contenido-sala';
   roomRoot.visible = false;
@@ -72,7 +76,19 @@ export function createMuseumContent({ scene, modelCache, onStatus = () => {} }) 
     });
   }
 
-  let activeSceneId = MUSEUM_SCENES[0].id;
+  let catalogScenes = MUSEUM_SCENES;
+  let catalogArtworks = ARTWORKS;
+  let activeSceneId = catalogScenes[0].id;
+
+  function getMuseumScene(sceneId) {
+    return catalogScenes.find((museumScene) => museumScene.id === sceneId) ?? null;
+  }
+
+  function getArtworkForSlot(sceneId, slotId) {
+    const museumScene = getMuseumScene(sceneId);
+    const artworkId = museumScene?.assignments?.[slotId];
+    return artworkId ? catalogArtworks[artworkId] ?? null : null;
+  }
 
   function setActiveScene(sceneId) {
     const nextScene = getMuseumScene(sceneId);
@@ -146,7 +162,8 @@ export function createMuseumContent({ scene, modelCache, onStatus = () => {} }) 
     onStatus(`Cargando ${artwork.name} bajo demanda…`);
 
     try {
-      const result = await modelCache.createMesh(artwork);
+      const modelUrl = await resolveModelUrl(artwork);
+      const result = await modelCache.createMesh({ ...artwork, modelUrl });
 
       if (requestToken !== slot.loadToken || requestedSceneId !== activeSceneId) {
         disposeMesh(result.mesh);
@@ -265,6 +282,29 @@ export function createMuseumContent({ scene, modelCache, onStatus = () => {} }) 
     },
     applyLayout,
     exportLayout,
+    setCatalog(nextCatalog) {
+      if (!Array.isArray(nextCatalog?.scenes) || nextCatalog.scenes.length === 0) {
+        throw new Error('El catálogo debe contener al menos una escena.');
+      }
+
+      const previousScene = getMuseumScene(activeSceneId);
+      const previousOrder = previousScene?.order ?? null;
+      catalogScenes = nextCatalog.scenes;
+      catalogArtworks = nextCatalog.artworks ?? {};
+
+      const matchingScene = catalogScenes.find((museumScene) =>
+        previousOrder === null ? false : museumScene.order === previousOrder,
+      );
+      activeSceneId = matchingScene?.id ?? catalogScenes[0].id;
+
+      for (const slot of slots.values()) {
+        slot.loadToken += 1;
+        clearArtwork(slot);
+      }
+
+      return activeSceneId;
+    },
+    getScenes: () => catalogScenes,
     getActiveSceneId: () => activeSceneId,
     setActiveScene,
     getNextUnplacedSlotId() {
@@ -276,6 +316,7 @@ export function createMuseumContent({ scene, modelCache, onStatus = () => {} }) 
     },
     placeSlotAtWorldPose,
     loadSlotArtwork,
+    resetSlots,
     resolveSlotId(object) {
       let current = object;
 

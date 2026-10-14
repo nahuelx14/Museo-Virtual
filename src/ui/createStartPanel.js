@@ -45,12 +45,14 @@ export function createStartPanel({
           <p class="form-message" role="status" aria-live="polite"></p>
         </form>
 
-        <div class="scene-control">
-          <label for="scene-id">Escena activa</label>
+        <div class="scene-control" data-admin="scene-editor" hidden>
+          <label for="scene-id">Escena que estás editando</label>
           <select id="scene-id" name="scene">
             ${sceneOptions}
           </select>
-          <p>Las tres escenas reutilizan las mismas 10 mesas físicas.</p>
+          <p>
+            Acá asignás las obras. La escena visible se elige desde el menú del casco.
+          </p>
         </div>
 
         <section class="auth-control" aria-labelledby="auth-title">
@@ -144,6 +146,8 @@ export function createStartPanel({
           </button>
         </section>
 
+        <div data-admin-catalog-root></div>
+
         <label class="recalibration-control">
           <input id="force-recalibration" type="checkbox" />
           <span>
@@ -180,6 +184,7 @@ export function createStartPanel({
   const message = root.querySelector('.form-message');
   const xrButton = root.querySelector('#enter-xr');
   const sceneSelect = root.querySelector('#scene-id');
+  const sceneControl = root.querySelector('[data-admin="scene-editor"]');
   const recalibrationInput = root.querySelector('#force-recalibration');
   const secureStatus = root.querySelector('[data-status="secure"]');
   const webxrStatus = root.querySelector('[data-status="webxr"]');
@@ -199,11 +204,13 @@ export function createStartPanel({
   const adminPassword = root.querySelector('#admin-password');
   const newPassword = root.querySelector('#admin-new-password');
   const passwordConfirmation = root.querySelector('#admin-confirm-password');
+  const adminCatalogRoot = root.querySelector('[data-admin-catalog-root]');
 
   let roomId = normalizeRoomId(initialRoomId);
   let sceneId = scenes.some((scene) => scene.id === initialSceneId)
     ? initialSceneId
     : scenes[0].id;
+  let roomAvailability = 'local';
 
   secureStatus.textContent = window.isSecureContext ? 'HTTPS listo' : 'Requiere HTTPS';
   sceneSelect.value = sceneId;
@@ -362,9 +369,31 @@ export function createStartPanel({
     input.value = nextRoomId ?? '';
     roomStatus.textContent = nextRoomId ?? 'Sin definir';
 
-    if (!nextRoomId) {
+    updateXRButton();
+  }
+
+  function updateXRButton() {
+    if (!roomId) {
       xrButton.disabled = true;
       xrButton.textContent = 'Ingresá una sala para continuar';
+      return;
+    }
+
+    if (roomAvailability === 'loading') {
+      xrButton.disabled = true;
+      xrButton.textContent = 'Cargando contenido de la sala…';
+      return;
+    }
+
+    if (roomAvailability === 'missing') {
+      xrButton.disabled = true;
+      xrButton.textContent = 'La sala todavía no está preparada';
+      return;
+    }
+
+    if (roomAvailability === 'error') {
+      xrButton.disabled = true;
+      xrButton.textContent = 'No se pudo preparar la sala';
       return;
     }
 
@@ -374,8 +403,31 @@ export function createStartPanel({
 
   return {
     xrButton,
+    adminCatalogRoot,
     getRoomId: () => roomId,
     getSceneId: () => sceneId,
+    setScenes(nextScenes, preferredSceneId = sceneId) {
+      if (!Array.isArray(nextScenes) || nextScenes.length === 0) {
+        sceneSelect.innerHTML = '<option value="">Sin escenas</option>';
+        sceneSelect.disabled = true;
+        sceneId = null;
+        return null;
+      }
+
+      sceneSelect.innerHTML = nextScenes
+        .map((scene) => `<option value="${escapeHtml(scene.id)}">${escapeHtml(scene.name)}</option>`)
+        .join('');
+      sceneSelect.disabled = false;
+      sceneId = nextScenes.some((scene) => scene.id === preferredSceneId)
+        ? preferredSceneId
+        : nextScenes[0].id;
+      sceneSelect.value = sceneId;
+      return sceneId;
+    },
+    setRoomAvailability(status) {
+      roomAvailability = status;
+      updateXRButton();
+    },
     setActivity(message) {
       activityStatus.textContent = message;
     },
@@ -406,6 +458,7 @@ export function createStartPanel({
       authMessage.textContent = nextMessage;
       logoutButton.hidden = !isAdmin;
       recoveryForm.hidden = !isRecovery;
+      sceneControl.hidden = !isAdmin;
 
       if (isRecovery) {
         authForm.hidden = true;
@@ -426,6 +479,15 @@ export function createStartPanel({
       openLoginButton.hidden = isAdmin || !isConfigured || isLoading || !authForm.hidden;
     },
   };
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
 }
 
 async function detectWebXR(statusElement) {

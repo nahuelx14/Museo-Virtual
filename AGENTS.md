@@ -61,6 +61,8 @@ son posiciones físicas fijas y tres escenas rotan una obra distinta por mesa.
   poder reemplazar un modelo sin volver a registrar la mesa.
 - Una escena solo almacena 10 asignaciones `mesaId → obraId`; cambiar de escena
   no modifica las transformaciones físicas de las mesas.
+- Para la muestra actual se administra una única sala física. Sus 10 mesas se
+  colocan una vez y se reutilizan sin cambios en todas las escenas.
 - Definir y documentar unidades en metros y el eje vertical `Y`.
 - Las transformaciones deben serializarse como números finitos y validarse antes
   de aplicarse a objetos Three.js.
@@ -111,6 +113,9 @@ son posiciones físicas fijas y tres escenas rotan una obra distinta por mesa.
 - Raycasting primario desde Touch Plus; hand tracking básico es una mejora con
   detección de capacidad, no una dependencia para entrar.
 - El menú flotante se asocia al controlador izquierdo cuando exista.
+- La escena visible se elige desde ese menú dentro de WebXR. El selector de la
+  landing es exclusivamente para que el admin edite asignaciones y no controla
+  la escena que está viendo el visitante.
 - Al entrar a `Examinar`, clonar posición, cuaternión, escala y parent originales.
   Al salir, restaurar exactamente esos valores y limpiar el estado temporal.
 - Solo puede existir una obra en modo `Examinar` por usuario.
